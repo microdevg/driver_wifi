@@ -41,10 +41,15 @@ static void event_handler(void* arg, esp_event_base_t event_base,
             return;
     }
    
+    if(event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP){
+        // Obtuvimos IP de la red, podemos trabajar.
+        CHECK_RUN_F( __callback_connection);
+
+    }
+
     if (event_id == WIFI_EVENT_STA_CONNECTED){
     printf("WiFi conectado\n");
     reconnect_try = 0;
-    CHECK_RUN_F( __callback_connection);
     return;
     }
     if (event_id == WIFI_EVENT_STA_DISCONNECTED){
@@ -93,6 +98,14 @@ esp_err_t config_nvs_pre_connection(){
                                                         &instance_any_id));
 
                                                  
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+
     wifi_config_t wifi_config = {0};
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA_WPA2_PSK;
     strncpy((char*)wifi_config.sta.ssid, (char*)WIFI_ID,strlen(WIFI_ID));
