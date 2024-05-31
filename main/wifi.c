@@ -9,54 +9,76 @@
 
 #define RCONN_TRY_MAX                   10
 
-uint8_t reconnect_try = 0;
+
+wifi_state_t _state ={
+    .wifi_connected = false,
+    .wifi_got_ip = false,
+    .try_counter = 0,
+};
+
+// Comentar si no quiero imprimir mis credenciales WiFi
+#define PRINT_CREDENTIALS       
 
 
 
-esp_callback_t __callback_connection = NULL;
-esp_callback_t __callback_disconnection = NULL;
 
 
 
 
+
+esp_callback_t __callback_connection = NOT_CALLBACK;
+esp_callback_t __callback_disconnection = NOT_CALLBACK;
+esp_callback_t __callback_failed = NOT_CALLBACK;
+
+
+
+/**
+ * @brief Manejado de Eventos del WiFi 
+ * 
+ * @param arg 
+ * @param event_base 
+ * @param event_id 
+ * @param event_data 
+ */
 static void event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
     // WiFi esta listo para conectarse a una red en modo STATION.
     if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START){
-        printf("WiFi modo station listo para conectarse a red\n");
-        esp_wifi_connect();}
+        esp_wifi_connect();
+        }
     
     else if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
-            if(reconnect_try < RCONN_TRY_MAX){
-                printf("Wifi desconectado, intentando reconexion:%u / %u\n",
-                reconnect_try,
+            if(_state.try_counter < RCONN_TRY_MAX){
+                _state.wifi_connected = false;
+                printf("[Wifi desconectado, intentando reconexion:%u / %u]\n",
+                _state.try_counter,
                 RCONN_TRY_MAX);
                 
-                reconnect_try ++;
+                _state.try_counter ++;
                 esp_wifi_connect();}
             else{
-                printf("Fallaron los intentos de reconexion\n");
+                printf("[Fallaron los intentos de reconexion]\n");
+                CHECK_RUN_F(__callback_failed);
                 }
             return;
     }
    
     if(event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP){
         // Obtuvimos IP de la red, podemos trabajar.
+        _state.wifi_got_ip = true;
         CHECK_RUN_F( __callback_connection);
 
     }
 
     if (event_id == WIFI_EVENT_STA_CONNECTED){
-    printf("WiFi conectado\n");
-    reconnect_try = 0;
-    return;
-    }
+        _state.try_counter = 0;
+        _state.wifi_connected = true;
+        return;}
     if (event_id == WIFI_EVENT_STA_DISCONNECTED){
-    printf("WiFi desconectado\n");
-    CHECK_RUN_F(__callback_disconnection);
-    return;
-    }
+        _state.wifi_connected = false;
+        CHECK_RUN_F(__callback_disconnection);
+        return;}
 
 }
 
@@ -75,21 +97,28 @@ esp_err_t config_nvs_pre_connection(){
 
  esp_err_t wifi_connect(const char* WIFI_ID, const char * PASS,
                         esp_callback_t cb_conn , 
-                        esp_callback_t cb_disconn ){
+                        esp_callback_t cb_disconn,
+                        esp_callback_t cb_failed ){
     
+    // Si ya esta conectado, no conecto nuevamente
+    if(_state.wifi_connected) return ESP_OK;
+
     // Asigno los callback recibidos por parámetro o los por defecto
     __callback_connection = cb_conn ;
     __callback_disconnection = cb_disconn ;
+    __callback_failed = cb_failed;
 
     esp_err_t err = ESP_OK;
+    // Configure el netif
     ESP_ERROR_CHECK(err = config_nvs_pre_connection());
     ESP_ERROR_CHECK(err = esp_netif_init());
     ESP_ERROR_CHECK(err = esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
+    err= esp_netif_create_default_wifi_sta();
      // Configuración por defecto.
     wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
     // Esta es la primera funcion que debe llamarse para el manejo de WiFi
     ESP_ERROR_CHECK(err = esp_wifi_init(&config));
+    
     esp_event_handler_instance_t instance_any_id;
     ESP_ERROR_CHECK(err = esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
@@ -115,9 +144,11 @@ esp_err_t config_nvs_pre_connection(){
     ESP_ERROR_CHECK(err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(err = esp_wifi_start());
 
+    #ifdef PRINT_CREDENTIALS
+
     printf( "wifi_init_softap finished. SSID:%s password:%s \n",
              WIFI_ID, PASS);
-    
+    #endif
     return err;
 }
 
@@ -127,8 +158,13 @@ esp_err_t config_nvs_pre_connection(){
 
 esp_err_t wifi_desconnect(void){
     esp_err_t err = ESP_OK;
-    err = esp_wifi_stop();
-    err = esp_wifi_disconnect();
-    err = esp_wifi_deinit();
+    // Si ya estoy desconectado, ignoro.
+    if( _state.wifi_connected == false) return ESP_OK;
+    _state.try_counter = 0;
+    _state.wifi_connected = false;
+    _state.wifi_got_ip = false;
+    ESP_ERROR_CHECK(err = esp_wifi_stop());
+    ESP_ERROR_CHECK(err = esp_wifi_disconnect());
+    ESP_ERROR_CHECK(err = esp_wifi_deinit());
     return err;
 }

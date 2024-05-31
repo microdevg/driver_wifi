@@ -2,8 +2,11 @@
 #define _BASE_H
 
 #include "esp_err.h"
+#include <stdbool.h>
 
 
+
+#define NOT_CALLBACK        (NULL)
 
 typedef void (*esp_callback_t)(void);
 
