@@ -7,6 +7,9 @@
 #include <string.h>
 #include "debug.h"
 
+
+// Comentar si no quiero imprimir mis credenciales WiFi
+#define PRINT_CREDENTIALS       
 #define RCONN_TRY_MAX                   10
 
 
@@ -16,8 +19,6 @@ wifi_state_t _state ={
     .try_counter = 0,
 };
 
-// Comentar si no quiero imprimir mis credenciales WiFi
-#define PRINT_CREDENTIALS       
 
 
 
