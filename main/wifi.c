@@ -114,7 +114,7 @@ esp_err_t config_nvs_pre_connection(){
     ESP_ERROR_CHECK(err = config_nvs_pre_connection());
     ESP_ERROR_CHECK(err = esp_netif_init());
     ESP_ERROR_CHECK(err = esp_event_loop_create_default());
-    err= esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_sta();
      // Configuración por defecto.
     wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
     // Esta es la primera funcion que debe llamarse para el manejo de WiFi
